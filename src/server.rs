@@ -19,7 +19,7 @@ lazy_static! {
 }
 
 fn main() {
-    // let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
     let tv = timeval {
         tv_sec: 0,
         tv_usec: 0
@@ -95,8 +95,15 @@ fn main() {
     get_random_bytes(&mut hashseed);
     dict_set_hash_function_seed(&mut hashseed);
 
-    // char *exec_name = strrchr(argv[0], '/');
-    // if (exec_name == NULL) exec_name = argv[0];
+
+    let mut exec_name = "";
+    if let Some(path) = args.get(0) {
+        exec_name = match path.rfind('/') {
+            Some(pos) => &path[pos + 1..],
+            None => path, // '/'가 없는 경우, 전체 경로가 이름이 됩니다.
+        };
+    }
+
     // server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
     // initServerConfig();
     // ACLInit(); /* The ACL subsystem must be initialized ASAP because the
