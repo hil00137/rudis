@@ -1,13 +1,30 @@
+use std::sync::Mutex;
+
+use lazy_static::lazy_static;
+use libc::timeval;
+
 use crate::crc64::crc64_init;
+use crate::redis_server::RedisServer;
+use crate::util::get_random_bytes;
 
 mod crc64;
 mod crcspeed;
+mod redis_server;
+mod util;
+mod lib;
+
+lazy_static! {
+    static ref SERVER: Mutex<RedisServer> = Mutex::new(RedisServer::new());
+}
 
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
-    // struct timeval tv;
-    // int j;
-    // char config_from_stdin = 0;
+    let tv = timeval {
+        tv_sec: 0,
+        tv_usec: 0
+    };
+    let j: i32;
+    let config_from_stdin: i8 = 0;
     //
     // #ifdef REDIS_TEST
     // monotonicInit(); /* Required for dict tests, that are relying on monotime during dict rehashing. */
@@ -64,15 +81,17 @@ fn main() {
     // srandom(time(NULL)^getpid()^tv.tv_usec);
     // init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
     crc64_init();
-    //
-    // /* Store umask value. Because umask(2) only offers a set-and-get API we have
-    //  * to reset it and restore it back. We do this early to avoid a potential
-    //  * race condition with threads that could be creating files or directories.
-    //  */
-    // umask(server.umask = umask(0777));
-    //
-    // uint8_t hashseed[16];
-    // getRandomBytes(hashseed,sizeof(hashseed));
+
+    /* Store umask value. Because umask(2) only offers a set-and-get API we have
+     * to reset it and restore it back. We do this early to avoid a potential
+     * race condition with threads that could be creating files or directories.
+     */
+    let mut server = SERVER.lock().unwrap();
+    server.umask = 0o0777;
+    // TODO: umask(server.umask); -> thinking
+
+    let mut hashseed: [u8; 16] = [0; 16];
+    get_random_bytes(&mut hashseed);
     // dictSetHashFunctionSeed(hashseed);
     //
     // char *exec_name = strrchr(argv[0], '/');

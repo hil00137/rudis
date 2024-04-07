@@ -10,3 +10,6 @@ name = "rudis-server"
 path = "src/server.rs"
 
 [dependencies]
+umask = "2.1.0"
+lazy_static = "1.4.0"
+libc = "0.2.153"

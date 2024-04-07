@@ -2,9 +2,13 @@
 /******************** END GENERATED PYCRC FUNCTIONS ********************/
 
 /* Initializes the 16KB lookup tables. */
+use std::sync::Mutex;
+use lazy_static::lazy_static;
 use crate::crcspeed::crcspeed64native_init;
 
-static CRC64_TABLE: [[u64; 256]; 8] =[[0; 256]; 8];
+lazy_static! {
+    static ref CRC64_TABLE: Mutex<[[u64; 256]; 8]> = Mutex::new([[0; 256]; 8]);
+}
 const POLY: u64 = 0xad93d23594c935a9;
 /******************** BEGIN GENERATED PYCRC FUNCTIONS ********************/
 /**
@@ -58,21 +62,21 @@ fn crc_reflect(mut data: u64, data_len: usize) -> u64 {
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  ******************************************************************************/
-fn _crc64(mut crc: u64, in_data: *const u8, len: u64) -> u64 {
-    let data: *const u8 = in_data;
-    let bit: u64;
+fn _crc64(mut crc: u64, in_data: &u8, len: u64) -> u64 {
+    let data: &u8 = in_data;
+    let mut bit: u64 = 0;
 
     for offset in 0 .. len {
-        let c: u8 = data[offset];
+        let c = (data >> offset) & 1;
         let mut i = 0x01;
-        while i & 0xff {
+        while i & 0xff != 0 {
             bit = crc & 0x8000000000000000;
-            if (c & i) {
+            if c & i != 0 {
                 bit = !bit;
             }
 
             crc <<= 1;
-            if (bit) {
+            if bit != 0 {
                 crc ^= POLY;
             }
             i <<= 1
@@ -86,5 +90,6 @@ fn _crc64(mut crc: u64, in_data: *const u8, len: u64) -> u64 {
 }
 
 pub fn crc64_init() {
-    crcspeed64native_init(_crc64, CRC64_TABLE);
+    let mut table = CRC64_TABLE.lock().unwrap();
+    crcspeed64native_init(_crc64, &mut table);
 }
