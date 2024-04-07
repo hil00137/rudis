@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use libc::timeval;
 
 use crate::crc64::crc64_init;
+use crate::lib::dict::dict_set_hash_function_seed;
 use crate::redis_server::RedisServer;
 use crate::util::get_random_bytes;
 
@@ -92,8 +93,8 @@ fn main() {
 
     let mut hashseed: [u8; 16] = [0; 16];
     get_random_bytes(&mut hashseed);
-    // dictSetHashFunctionSeed(hashseed);
-    //
+    dict_set_hash_function_seed(&mut hashseed);
+
     // char *exec_name = strrchr(argv[0], '/');
     // if (exec_name == NULL) exec_name = argv[0];
     // server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
