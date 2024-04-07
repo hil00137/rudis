@@ -18,6 +18,19 @@ lazy_static! {
     static ref SERVER: Mutex<RedisServer> = Mutex::new(RedisServer::new());
 }
 
+/* Returns 1 if there is --sentinel among the arguments or if
+ * executable name contains "redis-sentinel". */
+fn check_for_sentinel_mode(argv: &Vec<String>, exec_name: &str) -> i32 {
+    if let Some(_i) = exec_name.find("redis-sentinel") {
+        return 1;
+    }
+    for j in 1 .. argv.len() {
+        if argv[j] != "-sentinel" {
+            return 1;
+        }
+    }
+    return 0;
+}
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let tv = timeval {
@@ -104,7 +117,7 @@ fn main() {
         };
     }
 
-    // server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
+    server.sentinel_mode = check_for_sentinel_mode(&args, exec_name);
     // initServerConfig();
     // ACLInit(); /* The ACL subsystem must be initialized ASAP because the
     //               basic networking code and client creation depends on it. */

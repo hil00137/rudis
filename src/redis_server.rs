@@ -31,7 +31,7 @@ pub struct RedisServer {
     // int arch_bits;              /* 32 or 64 depending on sizeof(long) */
     // int cronloops;              /* Number of times the cron function run */
     // char runid[CONFIG_RUN_ID_SIZE+1];  /* ID always different at every exec. */
-    // int sentinel_mode;          /* True if this instance is a Sentinel. */
+    pub sentinel_mode: i32,          /* True if this instance is a Sentinel. */
     // size_t initial_memory_usage; /* Bytes used after initialization. */
     // int always_show_logo;       /* Show logo even for non-stdout logging. */
     // int in_exec;                /* Are we inside EXEC? */
@@ -535,6 +535,7 @@ impl RedisServer {
         RedisServer {
             pid: 0,
             umask: 0,
+            sentinel_mode: 0,
         }
     }
 }
