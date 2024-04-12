@@ -430,12 +430,12 @@ pub struct RedisServer {
     // int list_max_listpack_size;
     // int list_compress_depth;
     // /* time cache */
-    // redisAtomic time_t unixtime; /* Unix time sampled every cron cycle. */
+    pub unixtime: i64, /* Unix time sampled every cron cycle. */
     // time_t timezone;            /* Cached timezone. As set by tzset(). */
-    // redisAtomic int daylight_active; /* Currently in daylight saving time. */
-    // mstime_t mstime;            /* 'unixtime' in milliseconds. */
-    // ustime_t ustime;            /* 'unixtime' in microseconds. */
-    // mstime_t cmd_time_snapshot; /* Time snapshot of the root execution nesting. */
+    pub daylight_active: i32, /* Currently in daylight saving time. */
+    pub mstime: i64,            /* 'unixtime' in milliseconds. */
+    pub ustime: i64,            /* 'unixtime' in microseconds. */
+    pub cmd_time_snapshot: i64, /* Time snapshot of the root execution nesting. */
     // size_t blocking_op_nesting; /* Nesting level of blocking operation, used to reset blocked_last_cron. */
     // long long blocked_last_cron; /* Indicate the mstime of the last time we did cron jobs from a blocking operation */
     // /* Pubsub */
@@ -536,6 +536,11 @@ impl RedisServer {
             pid: 0,
             umask: 0,
             sentinel_mode: 0,
+            unixtime: 0,
+            daylight_active: 0,
+            mstime: 0,
+            ustime: 0,
+            cmd_time_snapshot: 0,
         }
     }
 }

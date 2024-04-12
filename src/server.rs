@@ -1,10 +1,11 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use lazy_static::lazy_static;
-use libc::timeval;
+use libc::{localtime_r, timeval, tm};
 
 use crate::crc64::crc64_init;
-use crate::lib::dict::dict_set_hash_function_seed;
+use crate::lib::dict::{dict_set_hash_function_seed, DictTypeTrait};
+use crate::lib::time::gettimeofday;
 use crate::redis_server::RedisServer;
 use crate::util::get_random_bytes;
 
@@ -13,29 +14,197 @@ mod crcspeed;
 mod redis_server;
 mod util;
 mod lib;
+mod config;
+
 
 lazy_static! {
     static ref SERVER: Mutex<RedisServer> = Mutex::new(RedisServer::new());
 }
+const CONFIG_DEFAULT_BINDADDR_COUNT: usize = 2;
+static CONFIG_DEFAULT_BINDADDR: [&str; 2] = ["*", "-::*"];
 
-/* Returns 1 if there is --sentinel among the arguments or if
- * executable name contains "redis-sentinel". */
-fn check_for_sentinel_mode(argv: &Vec<String>, exec_name: &str) -> i32 {
-    if let Some(_i) = exec_name.find("redis-sentinel") {
-        return 1;
-    }
-    for j in 1 .. argv.len() {
-        if argv[j] != "-sentinel" {
-            return 1;
+
+/* Return the UNIX time in microseconds */
+fn ustime()-> i64 {
+    let mut tv = gettimeofday(None);
+    return tv.timestamp_nanos_opt().unwrap();
+}
+
+// fn dictSdsCaseHash<T>(key: &T) -> u64 {
+//     return dictGenCaseHashFunction((unsigned char*)key, sdslen((char*)key));
+// }
+
+/* We take a cached value of the unix time in the global state because with
+ * virtual memory and aging there is to store the current time in objects at
+ * every object access, and accuracy is not needed. To access a global var is
+ * a lot faster than calling time(NULL).
+ *
+ * This function should be fast because it is called at every command execution
+ * in call(), so it is possible to decide if to update the daylight saving
+ * info or not using the 'update_daylight_info' argument. Normally we update
+ * such info only when calling this function from serverCron() but not when
+ * calling it from call(). */
+fn update_cached_time(server: &mut MutexGuard<RedisServer>, update_daylight_info: bool) {
+    let mut tv = gettimeofday(None);
+    let ustime =  tv.timestamp_nanos_opt().unwrap();
+    server.ustime = ustime;
+    server.mstime = server.ustime / 1000;
+    server.unixtime = server.mstime / 1000;
+
+    /* To get information about daylight saving time, we need to call
+     * localtime_r and cache the result. However calling localtime_r in this
+     * context is safe since we will never fork() while here, in the main
+     * thread. The logging function will call a thread safe version of
+     * localtime that has no locks. */
+    unsafe {
+        if update_daylight_info {
+            let mut tm: tm = tm {
+                tm_sec: 0,
+                tm_min: 0,
+                tm_hour: 0,
+                tm_mday: 0,
+                tm_mon: 0,
+                tm_year: 0,
+                tm_wday: 0,
+                tm_yday: 0,
+                tm_isdst: 0,
+                tm_gmtoff: 0,
+                tm_zone: std::ptr::null_mut(),
+            };
+            *localtime_r(&server.unixtime, &mut tm);
+            server.daylight_active = tm.tm_isdst;
         }
     }
-    return 0;
 }
+fn init_server_config(server: &mut MutexGuard<RedisServer>) {
+    // int j;
+    // let default_bindaddr: [&str; CONFIG_DEFAULT_BINDADDR_COUNT] = CONFIG_DEFAULT_BINDADDR;
+    // initConfigValues();
+    update_cached_time(server, true);
+    server.cmd_time_snapshot = server.mstime;
+    // getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
+    // server.runid[CONFIG_RUN_ID_SIZE] = '\0';
+    // changeReplicationId();
+    // clearReplicationId2();
+    // server.hz = CONFIG_DEFAULT_HZ; /* Initialize it ASAP, even if it may get
+    //                                   updated later after loading the config.
+    //                                   This value may be used before the server
+    //                                   is initialized. */
+    // server.timezone = getTimeZone(); /* Initialized by tzset(). */
+    // server.configfile = NULL;
+    // server.executable = NULL;
+    // server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
+    // server.bindaddr_count = CONFIG_DEFAULT_BINDADDR_COUNT;
+    // for (j = 0; j < CONFIG_DEFAULT_BINDADDR_COUNT; j++)
+    //     server.bindaddr[j] = zstrdup(default_bindaddr[j]);
+    // memset(server.listeners, 0x00, sizeof(server.listeners));
+    // server.active_expire_enabled = 1;
+    // server.lazy_expire_disabled = 0;
+    // server.skip_checksum_validation = 0;
+    // server.loading = 0;
+    // server.async_loading = 0;
+    // server.loading_rdb_used_mem = 0;
+    // server.aof_state = AOF_OFF;
+    // server.aof_rewrite_base_size = 0;
+    // server.aof_rewrite_scheduled = 0;
+    // server.aof_flush_sleep = 0;
+    // server.aof_last_fsync = time(NULL) * 1000;
+    // server.aof_cur_timestamp = 0;
+    // atomicSet(server.aof_bio_fsync_status,C_OK);
+    // server.aof_rewrite_time_last = -1;
+    // server.aof_rewrite_time_start = -1;
+    // server.aof_lastbgrewrite_status = C_OK;
+    // server.aof_delayed_fsync = 0;
+    // server.aof_fd = -1;
+    // server.aof_selected_db = -1; /* Make sure the first time will not match */
+    // server.aof_flush_postponed_start = 0;
+    // server.aof_last_incr_size = 0;
+    // server.aof_last_incr_fsync_offset = 0;
+    // server.active_defrag_running = 0;
+    // server.active_defrag_configuration_changed = 0;
+    // server.notify_keyspace_events = 0;
+    // server.blocked_clients = 0;
+    // memset(server.blocked_clients_by_type,0,
+    //        sizeof(server.blocked_clients_by_type));
+    // server.shutdown_asap = 0;
+    // server.shutdown_flags = 0;
+    // server.shutdown_mstime = 0;
+    // server.cluster_module_flags = CLUSTER_MODULE_FLAG_NONE;
+    // server.migrate_cached_sockets = dictCreate(&migrateCacheDictType);
+    // server.next_client_id = 1; /* Client IDs, start from 1 .*/
+    // server.page_size = sysconf(_SC_PAGESIZE);
+    // server.pause_cron = 0;
+    // server.dict_resizing = 1;
+    //
+    // server.latency_tracking_info_percentiles_len = 3;
+    // server.latency_tracking_info_percentiles = zmalloc(sizeof(double)*(server.latency_tracking_info_percentiles_len));
+    // server.latency_tracking_info_percentiles[0] = 50.0;  /* p50 */
+    // server.latency_tracking_info_percentiles[1] = 99.0;  /* p99 */
+    // server.latency_tracking_info_percentiles[2] = 99.9;  /* p999 */
+    //
+    // server.lruclock = getLRUClock();
+    // resetServerSaveParams();
+    //
+    // appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
+    // appendServerSaveParams(300,100);  /* save after 5 minutes and 100 changes */
+    // appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
+    //
+    // /* Replication related */
+    // server.masterhost = NULL;
+    // server.masterport = 6379;
+    // server.master = NULL;
+    // server.cached_master = NULL;
+    // server.master_initial_offset = -1;
+    // server.repl_state = REPL_STATE_NONE;
+    // server.repl_transfer_tmpfile = NULL;
+    // server.repl_transfer_fd = -1;
+    // server.repl_transfer_s = NULL;
+    // server.repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
+    // server.repl_down_since = 0; /* Never connected, repl is down since EVER. */
+    // server.master_repl_offset = 0;
+    // server.fsynced_reploff_pending = 0;
+    //
+    // /* Replication partial resync backlog */
+    // server.repl_backlog = NULL;
+    // server.repl_no_slaves_since = time(NULL);
+    //
+    // /* Failover related */
+    // server.failover_end_time = 0;
+    // server.force_failover = 0;
+    // server.target_replica_host = NULL;
+    // server.target_replica_port = 0;
+    // server.failover_state = NO_FAILOVER;
+    //
+    // /* Client output buffer limits */
+    // for (j = 0; j < CLIENT_TYPE_OBUF_COUNT; j++)
+    //     server.client_obuf_limits[j] = clientBufferLimitsDefaults[j];
+    //
+    // /* Linux OOM Score config */
+    // for (j = 0; j < CONFIG_OOM_COUNT; j++)
+    //     server.oom_score_adj_values[j] = configOOMScoreAdjValuesDefaults[j];
+    //
+    // /* Double constants initialization */
+    // R_Zero = 0.0;
+    // R_PosInf = 1.0/R_Zero;
+    // R_NegInf = -1.0/R_Zero;
+    // R_Nan = R_Zero/R_Zero;
+    //
+    // /* Command table -- we initialize it here as it is part of the
+    //  * initial configuration, since command names may be changed via
+    //  * redis.conf using the rename-command directive. */
+    // server.commands = dictCreate(&commandTableDictType);
+    // server.orig_commands = dictCreate(&commandTableDictType);
+    // populateCommandTable();
+    //
+    // /* Debugging */
+    // server.watchdog_period = 0;
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let tv = timeval {
         tv_sec: 0,
-        tv_usec: 0
+        tv_usec: 0,
     };
     let j: i32;
     let config_from_stdin: i8 = 0;
@@ -118,7 +287,7 @@ fn main() {
     }
 
     server.sentinel_mode = check_for_sentinel_mode(&args, exec_name);
-    // initServerConfig();
+    init_server_config(&mut server);
     // ACLInit(); /* The ACL subsystem must be initialized ASAP because the
     //               basic networking code and client creation depends on it. */
     // moduleInitModulesSystem();
@@ -379,4 +548,18 @@ fn main() {
     // aeMain(server.el);
     // aeDeleteEventLoop(server.el);
     // return 0;
+}
+
+/* Returns 1 if there is --sentinel among the arguments or if
+ * executable name contains "redis-sentinel". */
+fn check_for_sentinel_mode(argv: &Vec<String>, exec_name: &str) -> i32 {
+    if let Some(_i) = exec_name.find("redis-sentinel") {
+        return 1;
+    }
+    for j in 1..argv.len() {
+        if argv[j] != "-sentinel" {
+            return 1;
+        }
+    }
+    return 0;
 }
